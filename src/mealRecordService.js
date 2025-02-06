@@ -25,5 +25,6 @@ export async function saveMealRecord({ user_id, date, breakfast, lunch, dinner }
     }
   } catch (err) {
     console.error('Error saving meal record:', err);
+    throw err;
   }
 } 

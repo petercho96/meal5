@@ -35,7 +35,7 @@ const NavigationBar = () => {
       <div style={{ fontSize: '18px', fontWeight: 'bold' }}>식사 확인 App</div>
       <NavLinks>
         <StyledLink to="/">홈</StyledLink>
-        <StyledLink to="/my-records">내 기록</StyledLink>
+        <StyledLink to="/users">사용자</StyledLink>
         <StyledLink to="/admin">관리자</StyledLink>
       </NavLinks>
     </NavBarContainer>

@@ -1,91 +1,185 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
-import { saveMealRecord } from './mealRecordService';
+import styled from 'styled-components';
+
+const Container = styled.div`
+  max-width: 600px;
+  margin: 40px auto;
+  padding: 20px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+`;
 
 const MealSelectPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
   const date = queryParams.get('date');
-  
-  const [formData, setFormData] = useState({
+
+  const [users, setUsers] = useState([]);
+  const [selectedUser, setSelectedUser] = useState('');
+  const [meals, setMeals] = useState({
     breakfast: false,
     lunch: false,
-    dinner: false,
+    dinner: false
   });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // 로그인 없이 anonymous 사용자로 처리합니다.
-  const user = { id: 'anonymous' };
-
+  // 사용자 목록 불러오기
   useEffect(() => {
-    if (!date) return;
-    const fetchRecord = async () => {
-      const { data, error } = await supabase
-        .from('meal_records')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('date', date)
-        .single();
-      if (data) {
-        setFormData({
-          breakfast: data.breakfast,
-          lunch: data.lunch,
-          dinner: data.dinner,
-        });
+    const fetchUsers = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .order('created_at', { ascending: true });
+
+        if (error) throw error;
+
+        setUsers(data);
+        if (data.length > 0) {
+          setSelectedUser(data[0].id);
+        }
+      } catch (err) {
+        console.error('Error fetching users:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
       }
     };
-    fetchRecord();
-  }, [date, user.id]);
+
+    fetchUsers();
+  }, []);
+
+  // 선택된 사용자의 식사 기록 불러오기
+  useEffect(() => {
+    const fetchMealRecord = async () => {
+      if (!selectedUser || !date) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('meal_records')
+          .select('*')
+          .eq('user_id', selectedUser)
+          .eq('date', date)
+          .single();
+
+        if (error && error.code !== 'PGRST116') throw error;
+
+        if (data) {
+          setMeals({
+            breakfast: data.breakfast,
+            lunch: data.lunch,
+            dinner: data.dinner
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching meal record:', err);
+        setError(err.message);
+      }
+    };
+
+    fetchMealRecord();
+  }, [selectedUser, date]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    await saveMealRecord({ user_id: user.id, date, ...formData });
-    navigate('/completion');
+    if (!selectedUser || !date) return;
+
+    try {
+      const { error } = await supabase
+        .from('meal_records')
+        .upsert({
+          user_id: selectedUser,
+          date,
+          ...meals
+        });
+
+      if (error) throw error;
+
+      alert('식사 기록이 저장되었습니다.');
+      navigate('/completion');
+    } catch (err) {
+      console.error('Error saving meal record:', err);
+      alert('저장 실패: ' + err.message);
+    }
   };
 
+  if (error) return <Container>에러: {error}</Container>;
+  if (loading) return <Container>로딩 중...</Container>;
+
   return (
-    <div style={{ padding: '16px', maxWidth: '500px', margin: '40px auto', background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-      <h2 style={{ marginBottom: '16px' }}>선택한 날짜: {date}</h2>
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <label style={{ fontSize: '16px' }}>
-          <input
-            type="checkbox"
-            checked={formData.breakfast}
-            onChange={(e) =>
-              setFormData({ ...formData, breakfast: e.target.checked })
-            }
-            style={{ marginRight: '8px' }}
-          />
-          아침
-        </label>
-        <label style={{ fontSize: '16px' }}>
-          <input
-            type="checkbox"
-            checked={formData.lunch}
-            onChange={(e) =>
-              setFormData({ ...formData, lunch: e.target.checked })
-            }
-            style={{ marginRight: '8px' }}
-          />
-          점심
-        </label>
-        <label style={{ fontSize: '16px' }}>
-          <input
-            type="checkbox"
-            checked={formData.dinner}
-            onChange={(e) =>
-              setFormData({ ...formData, dinner: e.target.checked })
-            }
-            style={{ marginRight: '8px' }}
-          />
-          저녁
-        </label>
-        <button type="submit" style={{ padding: '12px', backgroundColor: '#007aff', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', cursor: 'pointer' }}>
-          제출
+    <Container>
+      <h2>식사 선택 ({date})</h2>
+      <form onSubmit={handleSubmit}>
+        <div style={{ marginBottom: '20px' }}>
+          <label>
+            사용자:
+            <select
+              value={selectedUser}
+              onChange={(e) => setSelectedUser(e.target.value)}
+              style={{ marginLeft: '10px', padding: '5px' }}
+            >
+              {users.map(user => (
+                <option key={user.id} value={user.id}>
+                  {user.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div style={{ marginBottom: '10px' }}>
+          <label>
+            <input
+              type="checkbox"
+              checked={meals.breakfast}
+              onChange={(e) => setMeals({ ...meals, breakfast: e.target.checked })}
+            />
+            아침
+          </label>
+        </div>
+
+        <div style={{ marginBottom: '10px' }}>
+          <label>
+            <input
+              type="checkbox"
+              checked={meals.lunch}
+              onChange={(e) => setMeals({ ...meals, lunch: e.target.checked })}
+            />
+            점심
+          </label>
+        </div>
+
+        <div style={{ marginBottom: '20px' }}>
+          <label>
+            <input
+              type="checkbox"
+              checked={meals.dinner}
+              onChange={(e) => setMeals({ ...meals, dinner: e.target.checked })}
+            />
+            저녁
+          </label>
+        </div>
+
+        <button
+          type="submit"
+          style={{
+            padding: '8px 16px',
+            background: '#0070f3',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          저장
         </button>
       </form>
-    </div>
+    </Container>
   );
 };
 
