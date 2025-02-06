@@ -12,17 +12,67 @@ import { testDatabaseConnection } from './supabaseClient';
 
 function App() {
   const [dbReady, setDbReady] = useState(false);
+  const [connectionError, setConnectionError] = useState(null);
 
   useEffect(() => {
+    let retryCount = 0;
+    const maxRetries = 3;
+
     const initDatabase = async () => {
-      const isConnected = await testDatabaseConnection();
-      setDbReady(isConnected);
+      try {
+        const isConnected = await testDatabaseConnection();
+        if (isConnected) {
+          setDbReady(true);
+        } else if (retryCount < maxRetries) {
+          retryCount++;
+          console.log(`Retrying connection... (${retryCount}/${maxRetries})`);
+          setTimeout(initDatabase, 2000); // 2초 후 재시도
+        } else {
+          setConnectionError('데이터베이스 연결에 실패했습니다. 페이지를 새로고침 해주세요.');
+        }
+      } catch (error) {
+        console.error('Database initialization error:', error);
+        setConnectionError('데이터베이스 연결 중 오류가 발생했습니다.');
+      }
     };
+
     initDatabase();
   }, []);
 
+  if (connectionError) {
+    return (
+      <div style={{ 
+        padding: '20px', 
+        textAlign: 'center',
+        marginTop: '50px' 
+      }}>
+        <h2>연결 오류</h2>
+        <p>{connectionError}</p>
+        <button 
+          onClick={() => window.location.reload()}
+          style={{
+            padding: '10px 20px',
+            marginTop: '20px',
+            cursor: 'pointer'
+          }}
+        >
+          다시 시도
+        </button>
+      </div>
+    );
+  }
+
   if (!dbReady) {
-    return <div>데이터베이스 연결 중...</div>;
+    return (
+      <div style={{ 
+        padding: '20px', 
+        textAlign: 'center',
+        marginTop: '50px' 
+      }}>
+        <h2>데이터베이스 연결 중...</h2>
+        <p>잠시만 기다려주세요...</p>
+      </div>
+    );
   }
 
   return (
